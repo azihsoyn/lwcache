@@ -16,17 +16,25 @@ type expireNotifier struct {
 	expire time.Time
 }
 
+type Cache interface {
+	Getter
+	Set(key interface{}, item interface{}, expire time.Duration) error
+	SetExpire(key interface{}, expire time.Duration)
+}
+
 type cache struct {
 	items map[interface{}]cacheItem
 	mutex sync.RWMutex
 }
+
+var _ Cache = (*cache)(nil)
 
 type cacheItem struct {
 	expire *time.Timer
 	value  interface{}
 }
 
-func New(name string) *cache {
+func New(name string) Cache {
 	c := &cache{
 		items: make(map[interface{}]cacheItem),
 		mutex: sync.RWMutex{},
@@ -45,6 +53,7 @@ func New(name string) *cache {
 	return c
 }
 
+// TODO: implement MSet (multi set) for performance
 func (c *cache) Set(key interface{}, item interface{}, expire time.Duration) error {
 	timer := time.NewTimer(expire)
 	c.mutex.Lock()
