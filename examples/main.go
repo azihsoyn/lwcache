@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/azihsoyn/cache"
+	cache "github.com/azihsoyn/lwcache"
 )
 
 func main() {
@@ -13,6 +13,7 @@ func main() {
 	c.Set(1, "Apple", 1*time.Second)
 	c.Set(2, "Banana", 2*time.Second)
 	c.Set(3, "Cake", 3*time.Second)
+	c.SetExpire(1, 5*time.Second)
 	for j := 0; j < 4; j++ {
 		for i := 1; i <= 3; i++ {
 			v, ok := c.Get(i)

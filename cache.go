@@ -17,13 +17,18 @@ type expireNotifier struct {
 }
 
 type cache struct {
-	items map[interface{}]interface{}
+	items map[interface{}]cacheItem
 	mutex sync.RWMutex
+}
+
+type cacheItem struct {
+	expire *time.Timer
+	value  interface{}
 }
 
 func New(name string) *cache {
 	c := &cache{
-		items: make(map[interface{}]interface{}),
+		items: make(map[interface{}]cacheItem),
 		mutex: sync.RWMutex{},
 	}
 	go func() {
@@ -41,19 +46,29 @@ func New(name string) *cache {
 }
 
 func (c *cache) Set(key interface{}, item interface{}, expire time.Duration) error {
+	timer := time.NewTimer(expire)
 	c.mutex.Lock()
-	c.items[key] = item
+	c.items[key] = cacheItem{
+		value:  item,
+		expire: timer,
+	}
 	c.mutex.Unlock()
 
-	go notifyExpire(key, expire)
+	go notifyExpire(key, timer)
 	return nil
 }
 
-func (c *cache) AddExpire(key interface{}, expire time.Duration) {
+func (c *cache) SetExpire(key interface{}, expire time.Duration) {
+	c.mutex.RLock()
+	item := c.items[key]
+	timer := item.expire
+	c.mutex.RUnlock()
+
+	timer.Reset(expire)
 }
 
-func notifyExpire(key interface{}, expire time.Duration) {
-	expiredAt := <-time.After(expire)
+func notifyExpire(key interface{}, timer *time.Timer) {
+	expiredAt := <-timer.C
 	expChan <- expireNotifier{
 		key:    key,
 		expire: expiredAt,
@@ -76,5 +91,5 @@ func (c *cache) Get(key interface{}) (interface{}, bool) {
 	v, ok := c.items[key]
 	c.mutex.RUnlock()
 
-	return v, ok
+	return v.value, ok
 }
