@@ -5,10 +5,11 @@ import (
 	"time"
 )
 
-var expChan = make(chan expireNotifier, 1000) // TODO: configurable
+var expChan = make(chan expireNotifier, 128)  // TODO: configurable
+var refChan = make(chan refreshNotifier, 128) // TODO: configurable
 
 type Getter interface {
-	Get(key interface{}) (interface{}, bool)
+	Get(key interface{}) (value interface{}, ok bool)
 }
 
 type expireNotifier struct {
@@ -16,10 +17,15 @@ type expireNotifier struct {
 	expire time.Time
 }
 
+type refreshNotifier struct {
+	key interface{}
+}
+
 type Cache interface {
 	Getter
-	Set(key interface{}, item interface{}, expire time.Duration) error
+	Set(key interface{}, item interface{}, expire time.Duration)
 	SetExpire(key interface{}, expire time.Duration)
+	SetRefresher(key interface{}, refreshInterval time.Duration, fn func(key interface{}) (interface{}, error))
 }
 
 type cache struct {
@@ -30,8 +36,10 @@ type cache struct {
 var _ Cache = (*cache)(nil)
 
 type cacheItem struct {
-	expire *time.Timer
-	value  interface{}
+	expire          *time.Timer
+	value           interface{}
+	refreshInterval time.Duration
+	refresher       func(key interface{}) (interface{}, error)
 }
 
 func New(name string) Cache {
@@ -46,6 +54,24 @@ func New(name string) Cache {
 				c.mutex.Lock()
 				delete(c.items, exp.key)
 				c.mutex.Unlock()
+			case ref := <-refChan:
+				// TODO: define func
+				c.mutex.Lock()
+				item, ok := c.items[ref.key]
+				if !ok {
+					// item deleted. stop refresher
+					c.mutex.Unlock()
+					continue
+				}
+				val, err := item.refresher(ref.key)
+				if err != nil {
+					// TODO?: notifyError
+					c.mutex.Unlock()
+					continue
+				}
+				item.value = val
+				c.items[ref.key] = item
+				c.mutex.Unlock()
 			default:
 			}
 		}
@@ -54,7 +80,7 @@ func New(name string) Cache {
 }
 
 // TODO: implement MSet (multi set) for performance
-func (c *cache) Set(key interface{}, item interface{}, expire time.Duration) error {
+func (c *cache) Set(key interface{}, item interface{}, expire time.Duration) {
 	timer := time.NewTimer(expire)
 	c.mutex.Lock()
 	c.items[key] = cacheItem{
@@ -64,7 +90,6 @@ func (c *cache) Set(key interface{}, item interface{}, expire time.Duration) err
 	c.mutex.Unlock()
 
 	go notifyExpire(key, timer)
-	return nil
 }
 
 func (c *cache) SetExpire(key interface{}, expire time.Duration) {
@@ -76,11 +101,34 @@ func (c *cache) SetExpire(key interface{}, expire time.Duration) {
 	timer.Reset(expire)
 }
 
+func (c *cache) SetRefresher(key interface{}, refreshInterval time.Duration, fn func(key interface{}) (interface{}, error)) {
+	c.mutex.Lock()
+	item := c.items[key]
+	item.refresher = fn
+	item.refreshInterval = refreshInterval
+	c.items[key] = item
+	c.mutex.Unlock()
+
+	go c.startBackGroundRefresh(key, refreshInterval)
+}
+
 func notifyExpire(key interface{}, timer *time.Timer) {
 	expiredAt := <-timer.C
 	expChan <- expireNotifier{
 		key:    key,
 		expire: expiredAt,
+	}
+}
+
+func (c *cache) startBackGroundRefresh(key interface{}, interval time.Duration) {
+	timer := time.NewTimer(interval)
+	<-timer.C
+	refChan <- refreshNotifier{
+		key: key,
+	}
+	// item exists
+	if _, ok := c.items[key]; ok {
+		go c.startBackGroundRefresh(key, interval)
 	}
 }
 
@@ -94,6 +142,7 @@ func (c *cache) OnRefresh(key string, fn func(item interface{}) error) error {
 }
 */
 
+// TODO: implement MGet (multi set) for performance
 // TODO?: check expire if need more accuracy
 func (c *cache) Get(key interface{}) (interface{}, bool) {
 	c.mutex.RLock()
