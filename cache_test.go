@@ -94,13 +94,13 @@ func TestSetRefresher_OnExpired(t *testing.T) {
 	actual, ok := c.Get(key)
 	assert.True(ok)
 	assert.Equal(expect, actual)
-	time.Sleep(1050 * time.Millisecond)
+	time.Sleep(1500 * time.Millisecond)
 
 	// refresh
 	actual, ok = c.Get(key)
 	assert.True(ok)
 	assert.Equal(expect+1, actual)
-	time.Sleep(1050 * time.Millisecond)
+	time.Sleep(1500 * time.Millisecond)
 
 	// expire
 	actual, ok = c.Get(key)
