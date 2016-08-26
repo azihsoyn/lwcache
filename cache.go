@@ -5,9 +5,6 @@ import (
 	"time"
 )
 
-var expChan = make(chan expireNotifier, 128)  // TODO: configurable
-var refChan = make(chan refreshNotifier, 128) // TODO: configurable
-
 type Getter interface {
 	Get(key interface{}) (value interface{}, ok bool)
 }
@@ -25,12 +22,14 @@ type Cache interface {
 	Getter
 	Set(key interface{}, item interface{}, expire time.Duration)
 	SetExpire(key interface{}, expire time.Duration)
-	SetRefresher(key interface{}, refreshInterval time.Duration, fn func(key interface{}) (interface{}, error))
+	SetRefresher(key interface{}, fn func(key interface{}, currentValue interface{}) (newValue interface{}, err error), refreshInterval time.Duration)
 }
 
 type cache struct {
-	items map[interface{}]cacheItem
-	mutex sync.RWMutex
+	items   map[interface{}]cacheItem
+	mutex   sync.RWMutex
+	expChan chan expireNotifier
+	refChan chan refreshNotifier
 }
 
 var _ Cache = (*cache)(nil)
@@ -39,22 +38,24 @@ type cacheItem struct {
 	expire          *time.Timer
 	value           interface{}
 	refreshInterval time.Duration
-	refresher       func(key interface{}) (interface{}, error)
+	refresher       func(key interface{}, currentValue interface{}) (newValue interface{}, err error)
 }
 
 func New(name string) Cache {
 	c := &cache{
-		items: make(map[interface{}]cacheItem),
-		mutex: sync.RWMutex{},
+		items:   make(map[interface{}]cacheItem),
+		mutex:   sync.RWMutex{},
+		expChan: make(chan expireNotifier, 128),  // TODO: configurable
+		refChan: make(chan refreshNotifier, 128), // TODO: configurable
 	}
-	go func() {
+	go func(c *cache) {
 		for {
 			select {
-			case exp := <-expChan:
+			case exp := <-c.expChan:
 				c.mutex.Lock()
 				delete(c.items, exp.key)
 				c.mutex.Unlock()
-			case ref := <-refChan:
+			case ref := <-c.refChan:
 				// TODO: define func
 				c.mutex.Lock()
 				item, ok := c.items[ref.key]
@@ -63,7 +64,7 @@ func New(name string) Cache {
 					c.mutex.Unlock()
 					continue
 				}
-				val, err := item.refresher(ref.key)
+				val, err := item.refresher(ref.key, item.value)
 				if err != nil {
 					// TODO?: notifyError
 					c.mutex.Unlock()
@@ -75,7 +76,7 @@ func New(name string) Cache {
 			default:
 			}
 		}
-	}()
+	}(c)
 	return c
 }
 
@@ -89,19 +90,19 @@ func (c *cache) Set(key interface{}, item interface{}, expire time.Duration) {
 	}
 	c.mutex.Unlock()
 
-	go notifyExpire(key, timer)
+	go c.notifyExpire(key, timer)
 }
 
 func (c *cache) SetExpire(key interface{}, expire time.Duration) {
-	c.mutex.RLock()
+	c.mutex.Lock()
 	item := c.items[key]
 	timer := item.expire
-	c.mutex.RUnlock()
+	c.mutex.Unlock()
 
 	timer.Reset(expire)
 }
 
-func (c *cache) SetRefresher(key interface{}, refreshInterval time.Duration, fn func(key interface{}) (interface{}, error)) {
+func (c *cache) SetRefresher(key interface{}, fn func(key interface{}, currentValue interface{}) (newValue interface{}, err error), refreshInterval time.Duration) {
 	c.mutex.Lock()
 	item := c.items[key]
 	item.refresher = fn
@@ -112,9 +113,9 @@ func (c *cache) SetRefresher(key interface{}, refreshInterval time.Duration, fn 
 	go c.startBackGroundRefresh(key, refreshInterval)
 }
 
-func notifyExpire(key interface{}, timer *time.Timer) {
+func (c *cache) notifyExpire(key interface{}, timer *time.Timer) {
 	expiredAt := <-timer.C
-	expChan <- expireNotifier{
+	c.expChan <- expireNotifier{
 		key:    key,
 		expire: expiredAt,
 	}
@@ -123,9 +124,11 @@ func notifyExpire(key interface{}, timer *time.Timer) {
 func (c *cache) startBackGroundRefresh(key interface{}, interval time.Duration) {
 	timer := time.NewTimer(interval)
 	<-timer.C
-	refChan <- refreshNotifier{
+	c.refChan <- refreshNotifier{
 		key: key,
 	}
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
 	// item exists
 	if _, ok := c.items[key]; ok {
 		go c.startBackGroundRefresh(key, interval)

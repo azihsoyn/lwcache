@@ -11,7 +11,7 @@ func main() {
 	c := cache.New("refresh sample")
 	key := "now"
 	c.Set(key, time.Now().Format("2006-01-02 15:04:05"), 5*time.Second)
-	c.SetRefresher(key, 1*time.Second, myRefresher)
+	c.SetRefresher(key, myRefresher, 1*time.Second)
 	for i := 0; i < 10; i++ {
 		v, ok := c.Get(key)
 		fmt.Printf("current value : %v, ok : %t\n", v, ok)
@@ -19,6 +19,6 @@ func main() {
 	}
 }
 
-func myRefresher(key interface{}) (interface{}, error) {
+func myRefresher(key interface{}, currentValue interface{}) (interface{}, error) {
 	return time.Now().Format("2006-01-02 15:04:05"), nil
 }
