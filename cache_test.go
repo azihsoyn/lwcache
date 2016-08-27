@@ -63,7 +63,8 @@ func TestSetRefresher(t *testing.T) {
 	}
 
 	c.Set(key, expect, 10*time.Second)
-	c.SetRefresher(key, refresher, 1*time.Second)
+	c.SetRefresher(refresher)
+	c.StartRefresher(key, 1*time.Second)
 
 	for i := 0; i < 5; i++ {
 		actual, ok := c.Get(key)
@@ -89,7 +90,8 @@ func TestSetRefresher_OnExpired(t *testing.T) {
 	}
 
 	c.Set(key, expect, 2*time.Second)
-	c.SetRefresher(key, refresher, 1*time.Second)
+	c.SetRefresher(refresher)
+	c.StartRefresher(key, 1*time.Second)
 
 	actual, ok := c.Get(key)
 	assert.True(ok)
@@ -119,7 +121,8 @@ func TestSetRefresher_OnRefreshError(t *testing.T) {
 	}
 
 	c.Set(key, expect, 10*time.Second)
-	c.SetRefresher(key, refresher, 1*time.Second)
+	c.SetRefresher(refresher)
+	c.StartRefresher(key, 1*time.Second)
 
 	for i := 0; i < 5; i++ {
 		actual, ok := c.Get(key)
