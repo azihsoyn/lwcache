@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"time"
 
-	cache "github.com/azihsoyn/lwcache"
+	"github.com/azihsoyn/lwcache"
 )
 
 func main() {
-	c := cache.New("sample")
+	c := lwcache.New("sample")
 	fmt.Println("now : ", time.Now().Format("2006-01-02 15:04:05"))
 	c.Set(1, "Apple", 1*time.Second)
 	c.Set(2, "Banana", 2*time.Second)

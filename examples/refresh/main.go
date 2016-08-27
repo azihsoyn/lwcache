@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"time"
 
-	cache "github.com/azihsoyn/lwcache"
+	"github.com/azihsoyn/lwcache"
 )
 
 func main() {
-	c := cache.New("refresh sample")
+	c := lwcache.New("refresh sample")
 	key := "now"
 	c.Set(key, time.Now().Format("2006-01-02 15:04:05"), 5*time.Second)
 	c.SetRefresher(myRefresher)
@@ -20,6 +20,9 @@ func main() {
 	}
 }
 
-func myRefresher(key interface{}, currentValue interface{}) (interface{}, error) {
+// heavy process
+func myRefresher(c lwcache.Cache, key interface{}, currentValue interface{}) (interface{}, error) {
+	time.Sleep(3 * time.Second)
+	c.SetExpire(key, 5*time.Second) // on refresh extend expiration
 	return time.Now().Format("2006-01-02 15:04:05"), nil
 }

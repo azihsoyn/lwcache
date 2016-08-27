@@ -4,5 +4,19 @@
 
 lwcache is lightweight cache library for golang
 
+# Feature
+- ligth weight
+- goroutine safe
+- background refresh per key
+
+# Installation
+
+```
+go get github.com/azihsoyn/lwcache
+```
+
+# Usage
+see [examples code](https://github.com/azihsoyn/lwcache/tree/master/examples)
+
 # LICENSE
 MIT

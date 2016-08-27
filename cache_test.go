@@ -1,4 +1,4 @@
-package cache
+package lwcache
 
 import (
 	"errors"
@@ -54,7 +54,7 @@ func TestSetRefresher(t *testing.T) {
 
 	key := "test-4"
 	expect := 0
-	refresher := func(key interface{}, currentValue interface{}) (interface{}, error) {
+	refresher := func(c Cache, key interface{}, currentValue interface{}) (interface{}, error) {
 		num, ok := currentValue.(int)
 		if ok {
 			return num + 1, nil
@@ -81,7 +81,7 @@ func TestSetRefresher_OnExpired(t *testing.T) {
 
 	key := "test-5"
 	expect := 0
-	refresher := func(key interface{}, currentValue interface{}) (interface{}, error) {
+	refresher := func(c Cache, key interface{}, currentValue interface{}) (interface{}, error) {
 		num, ok := currentValue.(int)
 		if ok {
 			return num + 1, nil
@@ -116,7 +116,7 @@ func TestSetRefresher_OnRefreshError(t *testing.T) {
 
 	key := "test-3"
 	expect := 0
-	refresher := func(key interface{}, currentValue interface{}) (interface{}, error) {
+	refresher := func(c Cache, key interface{}, currentValue interface{}) (interface{}, error) {
 		return 0, errors.New("refresh failed")
 	}
 
