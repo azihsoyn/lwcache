@@ -11,9 +11,7 @@ lwcache is lightweight cache library for golang
 
 # Installation
 
-```
-go get github.com/azihsoyn/lwcache
-```
+`go get github.com/azihsoyn/lwcache` or `go get gopkg.in/azihsoyn/lwcache.v1`
 
 # Usage
 see [examples code](https://github.com/azihsoyn/lwcache/tree/master/examples)
