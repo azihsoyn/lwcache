@@ -9,6 +9,11 @@ const (
 	NoExpire = time.Duration(0)
 )
 
+const (
+	refresherOn  = true
+	refresherOff = false
+)
+
 type Getter interface {
 	Get(key interface{}) (value interface{}, ok bool)
 }
@@ -24,6 +29,7 @@ type Cache interface {
 	SetExpire(key interface{}, expire time.Duration)
 	SetRefresher(fn func(c Cache, key interface{}, currentValue interface{}) (newValue interface{}, err error))
 	StartRefresher(key interface{}, refreshInterval time.Duration)
+	StopRefresher(key interface{})
 }
 
 type cache struct {
@@ -31,6 +37,9 @@ type cache struct {
 	items     map[interface{}]cacheItem
 	mutex     sync.RWMutex
 	refresher func(c Cache, key interface{}, currentValue interface{}) (newValue interface{}, err error)
+	// for refresher
+	refresherStatus map[interface{}]bool
+	refresherMutex  sync.RWMutex
 }
 
 var _ Cache = (*cache)(nil)
@@ -42,9 +51,11 @@ type cacheItem struct {
 
 func New(name string) Cache {
 	c := &cache{
-		namespace: name,
-		items:     make(map[interface{}]cacheItem),
-		mutex:     sync.RWMutex{},
+		namespace:       name,
+		items:           make(map[interface{}]cacheItem),
+		mutex:           sync.RWMutex{},
+		refresherStatus: make(map[interface{}]bool),
+		refresherMutex:  sync.RWMutex{},
 	}
 	return c
 }
@@ -83,12 +94,31 @@ func (c *cache) SetRefresher(fn func(c Cache, key interface{}, currentValue inte
 }
 
 func (c *cache) StartRefresher(key interface{}, refreshInterval time.Duration) {
-	time.AfterFunc(refreshInterval, c.startBackGroundRefresh(key, refreshInterval))
+	c.refresherMutex.RLock()
+	running := c.refresherStatus[key]
+	c.refresherMutex.RUnlock()
+	if !running {
+		c.refresherMutex.Lock()
+		c.refresherStatus[key] = refresherOn
+		c.refresherMutex.Unlock()
+		time.AfterFunc(refreshInterval, c.startBackGroundRefresh(key, refreshInterval))
+	}
+}
 
+func (c *cache) StopRefresher(key interface{}) {
+	c.refresherMutex.Lock()
+	c.refresherStatus[key] = false
+	c.refresherMutex.Unlock()
 }
 
 func (c *cache) startBackGroundRefresh(key interface{}, interval time.Duration) func() {
 	return func() {
+		c.refresherMutex.RLock()
+		running := c.refresherStatus[key]
+		c.refresherMutex.RUnlock()
+		if !running {
+			return
+		}
 		c.refresh(key)
 		time.AfterFunc(interval, c.startBackGroundRefresh(key, interval))
 	}
