@@ -73,6 +73,14 @@ func TestSetRefresher(t *testing.T) {
 		time.Sleep(1050 * time.Millisecond)
 		expect++
 	}
+
+	c.StopRefresher(key)
+	for i := 0; i < 2; i++ {
+		time.Sleep(1050 * time.Millisecond)
+		actual, ok := c.Get(key)
+		assert.True(ok)
+		assert.Equal(expect, actual) // expect not changed
+	}
 }
 
 func TestSetRefresher_OnExpired(t *testing.T) {
