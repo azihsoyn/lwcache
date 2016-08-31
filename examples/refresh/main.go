@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"time"
 
@@ -17,7 +16,14 @@ func main() {
 	c.StartRefresher(key, 1*time.Second) // this is no effect
 	for i := 0; i < 10; i++ {
 		v, ok := c.Get(key)
-		fmt.Printf("current value : %v, ok : %t\n", v, ok)
+		log.Printf("current value(before stop) : %v, ok : %t\n", v, ok)
+		time.Sleep(1 * time.Second)
+	}
+
+	c.StopRefresher(key)
+	for i := 0; i < 10; i++ {
+		v, ok := c.Get(key)
+		log.Printf("current value(after stop) : %v, ok : %t\n", v, ok)
 		time.Sleep(1 * time.Second)
 	}
 }
