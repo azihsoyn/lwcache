@@ -9,6 +9,7 @@ lwcache is lightweight cache library for golang
 - ligth weight
 - goroutine safe
 - background refresh per key
+- flexible key
 
 # Installation
 
