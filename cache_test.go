@@ -139,3 +139,16 @@ func TestSetRefresher_OnRefreshError(t *testing.T) {
 		time.Sleep(1050 * time.Millisecond)
 	}
 }
+
+func TestStartRefresher_OnNoRefresher(t *testing.T) {
+	c := New("test-6")
+
+	key := "test-6"
+	expect := 0
+
+	c.Set(key, expect, 10*time.Second)
+	c.StartRefresher(key, 500*time.Millisecond)
+
+	time.Sleep(1 * time.Second)
+	// check no panic
+}

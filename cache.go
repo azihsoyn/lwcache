@@ -181,6 +181,12 @@ func (c *cache) mutexSetValue(key, value interface{}) {
 }
 
 func (c *cache) refresh(key interface{}) {
+	// avoid panic
+	// see: https://github.com/azihsoyn/lwcache/issues/5
+	if c.refresher == nil {
+		return
+	}
+
 	item, ok := c.mutexGet(key)
 	if !ok {
 		// item deleted. not refresh
