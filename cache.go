@@ -47,6 +47,7 @@ var _ Cache = (*cache)(nil)
 type cacheItem struct {
 	expiration time.Time
 	value      interface{}
+	deleter    *time.Timer
 }
 
 func New(name string) Cache {
@@ -69,19 +70,24 @@ func (c *cache) Set(key, value interface{}, expire time.Duration) {
 	item := cacheItem{
 		value:      value,
 		expiration: expiration,
+		deleter: time.AfterFunc(expire, func() {
+			c.mutexDelete(key)
+		}),
 	}
 
 	c.mutexSet(key, item)
-	/* TODO?
-	time.AfterFunc(expire, func() {
-		c.mutexDelete(key)
-	})
-	*/
 }
 
 func (c *cache) SetExpire(key interface{}, expire time.Duration) {
 	if item, ok := c.mutexGet(key); ok {
 		item.expiration = time.Now().Add(expire)
+		if item.deleter != nil {
+			item.deleter.Reset(expire)
+		} else {
+			item.deleter = time.AfterFunc(expire, func() {
+				c.mutexDelete(key)
+			})
+		}
 		c.mutexSet(key, item)
 	}
 }
@@ -159,6 +165,11 @@ func (c *cache) mutexGet(key interface{}) (cacheItem, bool) {
 func (c *cache) mutexDelete(key interface{}) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
+
+	// for avoid goroutine leak
+	if c.items[key].deleter != nil {
+		c.items[key].deleter.Stop()
+	}
 
 	delete(c.items, key)
 }
