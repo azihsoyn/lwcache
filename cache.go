@@ -150,12 +150,10 @@ func (c *cache) OnRefresh(key string, fn func(item interface{}) error) error {
 
 // TODO: implement MGet (multi get) for performance
 func (c *cache) Get(key interface{}) (interface{}, bool) {
-	now := time.Now()
 	item, ok := c.mutexGet(key)
 
 	// no expire on expiration is zero value
-	if ok && !item.expiration.IsZero() && now.After(item.expiration) {
-		c.mutexDelete(key)
+	if !ok {
 		return nil, false
 	}
 
