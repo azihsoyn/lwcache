@@ -59,16 +59,20 @@ func New(name string) Cache {
 
 // TODO: implement MSet (multi set) for performance
 func (c *cache) Set(key, value interface{}, expire time.Duration) {
-	expiration := time.Time{}
+	var (
+		expiration time.Time
+		deleter    *time.Timer
+	)
 	if expire != NoExpire {
 		expiration = time.Now().Add(expire)
+		deleter = time.AfterFunc(expire, func() {
+			c.mutexDelete(key)
+		})
 	}
 	item := cacheItem{
 		value:      value,
 		expiration: expiration,
-		deleter: time.AfterFunc(expire, func() {
-			c.mutexDelete(key)
-		}),
+		deleter:    deleter,
 	}
 
 	c.mutexSet(key, item)
