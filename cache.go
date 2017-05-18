@@ -14,17 +14,13 @@ const (
 	refresherOff = false
 )
 
-type Getter interface {
-	Get(key interface{}) (value interface{}, ok bool)
-}
-
 type refreshNotifier struct {
 	c   *cache
 	key interface{}
 }
 
 type Cache interface {
-	Getter
+	Get(key interface{}) (value interface{}, ok bool)
 	Set(key interface{}, item interface{}, expire time.Duration)
 	SetExpire(key interface{}, expire time.Duration)
 	SetRefresher(fn func(c Cache, key interface{}, currentValue interface{}) (newValue interface{}, err error))
@@ -80,13 +76,21 @@ func (c *cache) Set(key, value interface{}, expire time.Duration) {
 
 func (c *cache) SetExpire(key interface{}, expire time.Duration) {
 	if item, ok := c.mutexGet(key); ok {
-		item.expiration = time.Now().Add(expire)
-		if item.deleter != nil {
-			item.deleter.Reset(expire)
+		if expire == NoExpire {
+			item.expiration = time.Time{}
+			if item.deleter != nil {
+				item.deleter.Stop()
+				item.deleter = nil
+			}
 		} else {
-			item.deleter = time.AfterFunc(expire, func() {
-				c.mutexDelete(key)
-			})
+			item.expiration = time.Now().Add(expire)
+			if item.deleter != nil {
+				item.deleter.Reset(expire)
+			} else {
+				item.deleter = time.AfterFunc(expire, func() {
+					c.mutexDelete(key)
+				})
+			}
 		}
 		c.mutexSet(key, item)
 	}
