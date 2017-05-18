@@ -46,6 +46,21 @@ func TestSetExpire(t *testing.T) {
 	actual, ok = c.Get(key)
 	assert.True(ok)
 	assert.Equal(expect, actual)
+
+	c.Set(key, expect, 10*time.Millisecond)
+	c.SetExpire(key, NoExpire)
+	time.Sleep(20 * time.Millisecond)
+	// not expired
+	actual, ok = c.Get(key)
+	assert.True(ok)
+	assert.Equal(expect, actual)
+
+	c.Set(key, expect, NoExpire)
+	c.SetExpire(key, 10*time.Millisecond)
+	time.Sleep(20 * time.Millisecond)
+	// expired
+	actual, ok = c.Get(key)
+	assert.False(ok)
 }
 
 func TestSetRefresher(t *testing.T) {
