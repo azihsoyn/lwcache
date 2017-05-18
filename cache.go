@@ -14,17 +14,13 @@ const (
 	refresherOff = false
 )
 
-type Getter interface {
-	Get(key interface{}) (value interface{}, ok bool)
-}
-
 type refreshNotifier struct {
 	c   *cache
 	key interface{}
 }
 
 type Cache interface {
-	Getter
+	Get(key interface{}) (value interface{}, ok bool)
 	Set(key interface{}, item interface{}, expire time.Duration)
 	SetExpire(key interface{}, expire time.Duration)
 	SetRefresher(fn func(c Cache, key interface{}, currentValue interface{}) (newValue interface{}, err error))
@@ -47,6 +43,7 @@ var _ Cache = (*cache)(nil)
 type cacheItem struct {
 	expiration time.Time
 	value      interface{}
+	deleter    *time.Timer
 }
 
 func New(name string) Cache {
@@ -62,26 +59,43 @@ func New(name string) Cache {
 
 // TODO: implement MSet (multi set) for performance
 func (c *cache) Set(key, value interface{}, expire time.Duration) {
-	expiration := time.Time{}
+	var (
+		expiration time.Time
+		deleter    *time.Timer
+	)
 	if expire != NoExpire {
 		expiration = time.Now().Add(expire)
+		deleter = time.AfterFunc(expire, func() {
+			c.mutexDelete(key)
+		})
 	}
 	item := cacheItem{
 		value:      value,
 		expiration: expiration,
+		deleter:    deleter,
 	}
 
 	c.mutexSet(key, item)
-	/* TODO?
-	time.AfterFunc(expire, func() {
-		c.mutexDelete(key)
-	})
-	*/
 }
 
 func (c *cache) SetExpire(key interface{}, expire time.Duration) {
 	if item, ok := c.mutexGet(key); ok {
-		item.expiration = time.Now().Add(expire)
+		if expire == NoExpire {
+			item.expiration = time.Time{}
+			if item.deleter != nil {
+				item.deleter.Stop()
+				item.deleter = nil
+			}
+		} else {
+			item.expiration = time.Now().Add(expire)
+			if item.deleter != nil {
+				item.deleter.Reset(expire)
+			} else {
+				item.deleter = time.AfterFunc(expire, func() {
+					c.mutexDelete(key)
+				})
+			}
+		}
 		c.mutexSet(key, item)
 	}
 }
@@ -136,12 +150,10 @@ func (c *cache) OnRefresh(key string, fn func(item interface{}) error) error {
 
 // TODO: implement MGet (multi get) for performance
 func (c *cache) Get(key interface{}) (interface{}, bool) {
-	now := time.Now()
 	item, ok := c.mutexGet(key)
 
 	// no expire on expiration is zero value
-	if ok && !item.expiration.IsZero() && now.After(item.expiration) {
-		c.mutexDelete(key)
+	if !ok {
 		return nil, false
 	}
 
@@ -159,6 +171,11 @@ func (c *cache) mutexGet(key interface{}) (cacheItem, bool) {
 func (c *cache) mutexDelete(key interface{}) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
+
+	// for avoid goroutine leak
+	if c.items[key].deleter != nil {
+		c.items[key].deleter.Stop()
+	}
 
 	delete(c.items, key)
 }
