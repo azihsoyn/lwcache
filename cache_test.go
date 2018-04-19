@@ -28,6 +28,25 @@ func TestSetAndGet(t *testing.T) {
 	assert.Equal(nil, actual)
 }
 
+func Test_Del(t *testing.T) {
+	assert := assert.New(t)
+	c := New("test-del")
+
+	key := "test-del-key"
+	expect := "test-del-value"
+
+	c.Set(key, expect, NoExpire)
+	actual, ok := c.Get(key)
+	assert.True(ok)
+	assert.Equal(expect, actual)
+
+	c.Del(key)
+	// after del
+	actual, ok = c.Get(key)
+	assert.False(ok)
+	assert.Equal(nil, actual)
+}
+
 func TestSetExpire(t *testing.T) {
 	assert := assert.New(t)
 	c := New("test-2")
